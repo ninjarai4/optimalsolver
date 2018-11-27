@@ -3965,6 +3965,7 @@ while (p_node >= node_arr)
          }
       else
          {
+           #pragma omp parallel for
          for (twist = p_node[1].twist + 1; twist < N_TWIST; twist++)
              {
              p_node[1].follow_type =
