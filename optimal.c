@@ -3943,104 +3943,100 @@ return 1;
 }
 
 
+
 /* ========================================================================= */
-   void  search_tree(Full_cube  *p_cube, Search_node  *node_arr)
+void  search_tree(Full_cube  *p_cube, Search_node  *node_arr, Search_node *p_node)
 /* ------------------------------------------------------------------------- */
 
 {
-register Search_node   *p_node;
 register int            twist, virtual_twist, new_sym_factor;
 
 
-p_node = node_arr;
+if (p_node->remain_depth == 0)
+    {
+    if (test_for_solution(p_cube, node_arr) &&
+        p_current_options->one_solution_only)
+      return;
+    return;
+    }
+ else
+    {
+#pragma omp parallel for num_threads(8) collapse(1) firstprivate(node_arr)
+    for (twist = 0; twist < N_TWIST; twist++)
+        {
+        p_node[1].follow_type =
+                        (int)twist_on_follow[twist][p_node->follow_type];
 
-while (p_node >= node_arr)
-      {
-      if (p_node->remain_depth == 0)
-         {
-         if (test_for_solution(p_cube, node_arr) &&
-             p_current_options->one_solution_only)
-            return;
-         p_node--;
-         }
-      else
-         {
-           #pragma omp parallel for
-         for (twist = p_node[1].twist + 1; twist < N_TWIST; twist++)
-             {
-             p_node[1].follow_type =
-                              (int)twist_on_follow[twist][p_node->follow_type];
+        if (p_node[1].follow_type == FOLLOW_INVALID)
+          continue;
 
-             if (p_node[1].follow_type == FOLLOW_INVALID)
-                continue;
+        p_node[1].remain_depth = p_node->remain_depth -
+                                    p_current_metric->twist_length[twist];
+        if (p_node[1].remain_depth < 0)
+          continue;
 
-             p_node[1].remain_depth = p_node->remain_depth -
-                                         p_current_metric->twist_length[twist];
-             if (p_node[1].remain_depth < 0)
-                continue;
+        n_nodes++;
 
-             n_nodes++;
+        virtual_twist =
+                    (int)invsym_on_twist_ud[p_node->ud.sym_state][twist];
+        new_sym_factor =
+          (int)twist_x_edge_to_sym[virtual_twist][p_node->ud.edge_state];
+        p_node[1].ud.edge_state =
+                (int)twist_on_edge[virtual_twist][p_node->ud.edge_state];
+        p_node[1].ud.sym_state =
+          (int)sym_x_invsym_to_sym[p_node->ud.sym_state][new_sym_factor];
+        p_node[1].ud.corner_state = (int)sym_on_corner[new_sym_factor]
+          [(int)twist_on_corner[virtual_twist][p_node->ud.corner_state]];
 
-             virtual_twist =
-                          (int)invsym_on_twist_ud[p_node->ud.sym_state][twist];
-             new_sym_factor =
-                (int)twist_x_edge_to_sym[virtual_twist][p_node->ud.edge_state];
-             p_node[1].ud.edge_state =
-                      (int)twist_on_edge[virtual_twist][p_node->ud.edge_state];
-             p_node[1].ud.sym_state =
-                (int)sym_x_invsym_to_sym[p_node->ud.sym_state][new_sym_factor];
-             p_node[1].ud.corner_state = (int)sym_on_corner[new_sym_factor]
-                [(int)twist_on_corner[virtual_twist][p_node->ud.corner_state]];
-
-             if (p_node[1].remain_depth <
-                      DIST(p_node[1].ud.corner_state, p_node[1].ud.edge_state))
-                continue;
+        if (p_node[1].remain_depth <
+                DIST(p_node[1].ud.corner_state, p_node[1].ud.edge_state))
+          continue;
 
 
-             virtual_twist =
-                          (int)invsym_on_twist_rl[p_node->rl.sym_state][twist];
-             new_sym_factor =
-                (int)twist_x_edge_to_sym[virtual_twist][p_node->rl.edge_state];
-             p_node[1].rl.edge_state =
-                      (int)twist_on_edge[virtual_twist][p_node->rl.edge_state];
-             p_node[1].rl.sym_state =
-                (int)sym_x_invsym_to_sym[p_node->rl.sym_state][new_sym_factor];
-             p_node[1].rl.corner_state = (int)sym_on_corner[new_sym_factor]
-                [(int)twist_on_corner[virtual_twist][p_node->rl.corner_state]];
+        virtual_twist =
+                    (int)invsym_on_twist_rl[p_node->rl.sym_state][twist];
+        new_sym_factor =
+          (int)twist_x_edge_to_sym[virtual_twist][p_node->rl.edge_state];
+        p_node[1].rl.edge_state =
+                (int)twist_on_edge[virtual_twist][p_node->rl.edge_state];
+        p_node[1].rl.sym_state =
+          (int)sym_x_invsym_to_sym[p_node->rl.sym_state][new_sym_factor];
+        p_node[1].rl.corner_state = (int)sym_on_corner[new_sym_factor]
+          [(int)twist_on_corner[virtual_twist][p_node->rl.corner_state]];
 
-             if (p_node[1].remain_depth <
-                      DIST(p_node[1].rl.corner_state, p_node[1].rl.edge_state))
-                continue;
-
-
-             virtual_twist =
-                          (int)invsym_on_twist_fb[p_node->fb.sym_state][twist];
-             new_sym_factor =
-                (int)twist_x_edge_to_sym[virtual_twist][p_node->fb.edge_state];
-             p_node[1].fb.edge_state =
-                      (int)twist_on_edge[virtual_twist][p_node->fb.edge_state];
-             p_node[1].fb.sym_state =
-                (int)sym_x_invsym_to_sym[p_node->fb.sym_state][new_sym_factor];
-             p_node[1].fb.corner_state = (int)sym_on_corner[new_sym_factor]
-                [(int)twist_on_corner[virtual_twist][p_node->fb.corner_state]];
-
-             if (p_node[1].remain_depth <
-                      DIST(p_node[1].fb.corner_state, p_node[1].fb.edge_state))
-                continue;
+        if (p_node[1].remain_depth <
+                DIST(p_node[1].rl.corner_state, p_node[1].rl.edge_state))
+          continue;
 
 
-             p_node[1].twist = twist;
-             break;
-             }
+        virtual_twist =
+                    (int)invsym_on_twist_fb[p_node->fb.sym_state][twist];
+        new_sym_factor =
+          (int)twist_x_edge_to_sym[virtual_twist][p_node->fb.edge_state];
+        p_node[1].fb.edge_state =
+                (int)twist_on_edge[virtual_twist][p_node->fb.edge_state];
+        p_node[1].fb.sym_state =
+          (int)sym_x_invsym_to_sym[p_node->fb.sym_state][new_sym_factor];
+        p_node[1].fb.corner_state = (int)sym_on_corner[new_sym_factor]
+          [(int)twist_on_corner[virtual_twist][p_node->fb.corner_state]];
 
-         if (twist == N_TWIST)
-            p_node--;
-         else
-            {
-            p_node++;
-            p_node[1].twist = -1;
-            }
-         }
+        if (p_node[1].remain_depth <
+                DIST(p_node[1].fb.corner_state, p_node[1].fb.edge_state))
+          continue;
+
+
+        p_node[1].twist = twist;
+        p_node[2].twist = -1;
+        search_tree(p_cube, node_arr, p_node+1);
+        }
+
+    /* if (twist == N_TWIST) */
+    /*    p_node--; */
+    /* else */
+    /*    { */
+    /*    p_node++; */
+    /*    p_node[1].twist = -1; */
+    /*    } */
       }
 
 return;
@@ -4257,7 +4253,7 @@ for (ii = start_depth; ii <= search_limit; ii += p_current_metric->increment)
     n_tests = (unsigned int)0;
     node_arr[0].remain_depth = ii;
     node_arr[1].twist = -1;
-    search_tree(&full_cube_struct, node_arr);
+    search_tree(&full_cube_struct, node_arr, node_arr);
 
     if ((p_current_options->one_solution_only == 0) || (sol_found == 0))
        {
