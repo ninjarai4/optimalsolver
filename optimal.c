@@ -4278,8 +4278,10 @@ for (ii = start_depth; ii <= search_limit; ii += p_current_metric->increment)
           depthofstore=ii;
           search_tree(&full_cube_struct, node_arr, 0, writeback, &writeback_i);
         } else {
+/* #pragma omp parallel num_threads(2) default(none) reduction(+:n_nodes)  \ */
+/*   reduction(+:n_tests) reduction(max:sol_found) firstprivate(node_arr,full_cube_struct) */
           for (int node_i=0; node_i <= writeback_i; node_i++) {
-            node_arr[depthofstore].remain_depth += p_current_metric->increment;
+            writeback[node_i][depthofstore].remain_depth += p_current_metric->increment;
             search_tree(&full_cube_struct, writeback[node_i], depthofstore, NULL, NULL);
           }
         }
