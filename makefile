@@ -1,2 +1,2 @@
 default:
-	gcc optimal.c -fopenmp -fopenacc -o bin/optimal
+	gcc optimal.c -fopenmp -g -o bin/optimal

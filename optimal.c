@@ -3883,16 +3883,19 @@ for (ii = 0; ii < count; ii++)
     f_length += metric_f_length(turn_list[ii]);
     }
 
-for (ii = 0; ii < count; ii++)
-    printf(" %s", twist_string[turn_list[ii]]);
+ #pragma omp critical
+ {
+   for (ii = 0; ii < count; ii++)
+     printf(" %s", twist_string[turn_list[ii]]);
 
-if (p_current_metric->metric == QUARTER_TURN_METRIC)
-   printf("  (%dq*, %df)\n", q_length, f_length);
-else
-   printf("  (%df*, %dq)\n", f_length, q_length);
-fflush(stdout);
+   if (p_current_metric->metric == QUARTER_TURN_METRIC)
+     printf("  (%dq*, %df)\n", q_length, f_length);
+   else
+     printf("  (%df*, %dq)\n", f_length, q_length);
+   fflush(stdout);
 
-sol_found = 1;
+   sol_found = 1;
+ }
 
 return;
 }
@@ -3907,7 +3910,7 @@ register Search_node   *p_node;
 register int            cornerperm, sliceedge;
 
 
-n_tests++;
+//n_tests++;
 
 cornerperm = p_cube->cornerperm;
 for (p_node = node_arr; p_node->remain_depth > 0; p_node++)
@@ -3943,27 +3946,28 @@ return 1;
 }
 
 
-
 /* ========================================================================= */
-void  search_tree(Full_cube  *p_cube, Search_node  *node_arr, Search_node *p_node)
+void  search_tree(Full_cube  *p_cube, Search_node  *node_arr, int p_node_index)
 /* ------------------------------------------------------------------------- */
 
 {
-register int            twist, virtual_twist, new_sym_factor;
 
-
-if (p_node->remain_depth == 0)
+if (node_arr[p_node_index].remain_depth == 0)
     {
     if (test_for_solution(p_cube, node_arr) &&
         p_current_options->one_solution_only)
-      return;
-    return;
+      {}  // figure out how to quit
     }
  else
     {
-#pragma omp parallel for num_threads(8) collapse(1) firstprivate(node_arr)
-    for (twist = 0; twist < N_TWIST; twist++)
+
+#pragma omp parallel for num_threads(17) default(shared) reduction(+:n_nodes)  \
+  reduction(+:n_tests) reduction(max:sol_found) firstprivate(node_arr,p_cube,p_node_index) if(p_node_index<2)
+/* #pragma omp for schedule(static,1) nowait if(0) */
+    for (register int twist = 0; twist < N_TWIST; twist++)
         {
+          Search_node *p_node = node_arr+p_node_index;
+		register int virtual_twist, new_sym_factor;
         p_node[1].follow_type =
                         (int)twist_on_follow[twist][p_node->follow_type];
 
@@ -4027,19 +4031,10 @@ if (p_node->remain_depth == 0)
 
         p_node[1].twist = twist;
         p_node[2].twist = -1;
-        search_tree(p_cube, node_arr, p_node+1);
+        search_tree(p_cube, node_arr, p_node_index+1);
         }
-
-    /* if (twist == N_TWIST) */
-    /*    p_node--; */
-    /* else */
-    /*    { */
-    /*    p_node++; */
-    /*    p_node[1].twist = -1; */
-    /*    } */
       }
 
-return;
 }
 
 
@@ -4253,7 +4248,16 @@ for (ii = start_depth; ii <= search_limit; ii += p_current_metric->increment)
     n_tests = (unsigned int)0;
     node_arr[0].remain_depth = ii;
     node_arr[1].twist = -1;
-    search_tree(&full_cube_struct, node_arr, node_arr);
+/* #pragma omp parallel num_threads(2) default(none) reduction(+:n_nodes)  \ */
+/*   reduction(+:n_tests) reduction(max:sol_found) firstprivate(node_arr,full_cube_struct) */
+    {
+      /* Search_node             local_node_arr[MAX_TWISTS]; */
+      /* memcpy(local_node_arr,node_arr,MAX_TWISTS*sizeof(Search_node)); */
+
+      /* search_tree(&full_cube_struct, local_node_arr, local_node_arr); */
+      search_tree(&full_cube_struct, node_arr, 0);
+      #pragma omp barrier
+    }
 
     if ((p_current_options->one_solution_only == 0) || (sol_found == 0))
        {
