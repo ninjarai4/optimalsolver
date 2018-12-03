@@ -4,17 +4,20 @@
 /*  malloc.h removed, long string fixed  */
 
 
-#define  USE_METRIC        FACE_TURN_METRIC
+#define  USE_METRIC        QUARTER_TURN_METRIC
 #define  SEARCH_LIMIT                        0
 #define  USE_SYMMETRY                        1
 #define  ONE_SOLUTION_ONLY                   0
 
+#define  GPU_CUTOFF_DEPTH                4
 
 #include  <stdio.h>
 #include  <stdlib.h>
 #include  <string.h>
 #include  <setjmp.h>
 #include  <signal.h>
+#include  <omp.h>
+#include  <math.h>
 
 
 #define  QUARTER_TURN_METRIC                 0
@@ -3910,7 +3913,7 @@ register Search_node   *p_node;
 register int            cornerperm, sliceedge;
 
 
-//n_tests++;
+n_tests++;
 
 cornerperm = p_cube->cornerperm;
 for (p_node = node_arr; p_node->remain_depth > 0; p_node++)
@@ -3947,23 +3950,28 @@ return 1;
 
 
 /* ========================================================================= */
-void  search_tree(Full_cube  *p_cube, Search_node  *node_arr, int p_node_index)
+void  search_tree(Full_cube  *p_cube, Search_node  *node_arr, int p_node_index, Search_node **writeback, long *writeback_i)
 /* ------------------------------------------------------------------------- */
 
 {
 
 if (node_arr[p_node_index].remain_depth == 0)
     {
-    if (test_for_solution(p_cube, node_arr) &&
-        p_current_options->one_solution_only)
-      {}  // figure out how to quit
+      if (writeback != NULL){
+        writeback[*writeback_i] = calloc(MAX_TWISTS,sizeof(Search_node));
+        memcpy(writeback[*writeback_i],node_arr,MAX_TWISTS*sizeof(Search_node));
+        (*writeback_i)++;
+      }
+
+      if (test_for_solution(p_cube, node_arr) &&
+          p_current_options->one_solution_only)
+        {}  // figure out how to quit
     }
  else
     {
-
-#pragma omp parallel for num_threads(17) default(shared) reduction(+:n_nodes)  \
-  reduction(+:n_tests) reduction(max:sol_found) firstprivate(node_arr,p_cube,p_node_index) if(p_node_index<2)
-/* #pragma omp for schedule(static,1) nowait if(0) */
+      /* int threadno = omp_get_thread_num(); */
+/* #pragma omp parallel for num_threads(3) default(shared) reduction(+:n_nodes)  \ */
+/*   reduction(+:n_tests) reduction(max:sol_found) firstprivate(node_arr,p_cube,p_node_index) if(p_node_index<2/\*,threadno*\/) */
     for (register int twist = 0; twist < N_TWIST; twist++)
         {
           Search_node *p_node = node_arr+p_node_index;
@@ -3977,7 +3985,14 @@ if (node_arr[p_node_index].remain_depth == 0)
         p_node[1].remain_depth = p_node->remain_depth -
                                     p_current_metric->twist_length[twist];
         if (p_node[1].remain_depth < 0)
+        {
+          if (writeback != NULL){
+            writeback[*writeback_i] = calloc(MAX_TWISTS,sizeof(Search_node));
+            memcpy(writeback[*writeback_i],node_arr,MAX_TWISTS*sizeof(Search_node));
+            (*writeback_i)++;
+          }
           continue;
+        }
 
         n_nodes++;
 
@@ -4031,7 +4046,7 @@ if (node_arr[p_node_index].remain_depth == 0)
 
         p_node[1].twist = twist;
         p_node[2].twist = -1;
-        search_tree(p_cube, node_arr, p_node_index+1);
+        search_tree(p_cube, node_arr, p_node_index+1, writeback, writeback_i);
         }
       }
 
@@ -4141,9 +4156,7 @@ int                     digits[4], ii, started;
 for (ii = 0; ii < 4; ii++)
     {
     digits[ii] = nn % 1000;
-    nn /= 1000;
-    }
-
+    nn /= 1000;} 
 started = 0;
 
 for (ii = 3; ii >= 0; ii--)
@@ -4197,6 +4210,8 @@ static int              initialized = 0;
 Full_cube               full_cube_struct;
 Search_node             node_arr[MAX_TWISTS];
 int                     ii, start_depth, search_limit;
+ Search_node **writeback = calloc(pow(N_TWIST, GPU_CUTOFF_DEPTH),sizeof(Search_node) * 2);
+long writeback_i = 0;
 
 
 if (initialized == 0)
@@ -4255,8 +4270,20 @@ for (ii = start_depth; ii <= search_limit; ii += p_current_metric->increment)
       /* memcpy(local_node_arr,node_arr,MAX_TWISTS*sizeof(Search_node)); */
 
       /* search_tree(&full_cube_struct, local_node_arr, local_node_arr); */
-      search_tree(&full_cube_struct, node_arr, 0);
-      #pragma omp barrier
+      int depthofstore = 0;
+      if(ii<GPU_CUTOFF_DEPTH) {
+        search_tree(&full_cube_struct, node_arr, 0, NULL, NULL);
+      } else {
+        if(depthofstore == 0){
+          depthofstore=ii;
+          search_tree(&full_cube_struct, node_arr, 0, writeback, &writeback_i);
+        } else {
+          for (int node_i=0; node_i <= writeback_i; node_i++) {
+            node_arr[depthofstore].remain_depth += p_current_metric->increment;
+            search_tree(&full_cube_struct, writeback[node_i], depthofstore, NULL, NULL);
+          }
+        }
+      }
     }
 
     if ((p_current_options->one_solution_only == 0) || (sol_found == 0))
