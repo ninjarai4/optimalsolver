@@ -4294,19 +4294,16 @@ for (ii = start_depth; ii <= search_limit; ii += p_current_metric->increment)
         } else {
           printf("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa%li\n", writeback_i);
           //default(none) reduction(+:n_nodes) reduction(+:n_tests) reduction(max:sol_found) shared(writeback,full_cube_struct,depthofstore, p_current_metric, writeback_i)
-#pragma omp parallel num_threads(1000)
-          {
-            Search_node *t_node_arr = calloc(MAX_TWISTS,sizeof(Search_node));
-#pragma omp for schedule(static)
-            for (int node_i=0; node_i < writeback_i; node_i++) {
-              memcpy(t_node_arr,writeback[node_i],MAX_TWISTS*sizeof(Search_node));
-              int d;
-              for (d=0; t_node_arr[d].twist!=-1 && d<=MAX_TWISTS; d++){
-                t_node_arr[d].remain_depth += ii-depthofstore;
-              }
-              search_tree(&full_cube_struct, t_node_arr, d-1, NULL, NULL);
+
+          Search_node t_node_arr[MAX_TWISTS];
+#pragma omp target teams distribute parallel for schedule(static,1) private(t_node_arr)
+          for (int node_i=0; node_i < writeback_i; node_i++) {
+            memcpy(t_node_arr,writeback[node_i],MAX_TWISTS*sizeof(Search_node));
+            int d;
+            for (d=0; t_node_arr[d].twist!=-1 && d<=MAX_TWISTS; d++){
+              t_node_arr[d].remain_depth += ii-depthofstore;
             }
-            free(t_node_arr);
+            search_tree(&full_cube_struct, t_node_arr, d-1, NULL, NULL);
           }
         }
       }
