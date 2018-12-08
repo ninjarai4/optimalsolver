@@ -52,7 +52,11 @@
 #define  MAX_PERM_N                         12
 #define  MAX_CHECK_PERM_N                   24
 
-#define  MAX_TWISTS                         43
+#if USE_METRIC==QUARTER_TURN_METRIC
+#define  MAX_TWISTS                         26 //43
+#else
+#define  MAX_TWISTS                         20 //43
+#endif
 
 #define  TWIST_F                             0
 #define  TWIST_F2                            1
@@ -3887,7 +3891,7 @@ for (ii = 0; ii < count; ii++)
     f_length += metric_f_length(turn_list[ii]);
     }
 
- /* #pragma omp critical */
+ #pragma omp critical
  {
    for (ii = 0; ii < count; ii++)
      printf(" %s", twist_string[turn_list[ii]]);
@@ -3992,64 +3996,63 @@ if (node_arr[p_node_index].remain_depth == 0)
 
         n_nodes++;
 
-        if (writeback == NULL) {
-          virtual_twist =
-            (int)invsym_on_twist_ud[p_node->ud.sym_state][twist];
-          new_sym_factor =
-            (int)twist_x_edge_to_sym[virtual_twist][p_node->ud.edge_state];
-          p_node[1].ud.edge_state =
-            (int)twist_on_edge[virtual_twist][p_node->ud.edge_state];
-          p_node[1].ud.sym_state =
-            (int)sym_x_invsym_to_sym[p_node->ud.sym_state][new_sym_factor];
-          p_node[1].ud.corner_state = (int)sym_on_corner[new_sym_factor]
-            [(int)twist_on_corner[virtual_twist][p_node->ud.corner_state]];
+        virtual_twist =
+          (int)invsym_on_twist_ud[p_node->ud.sym_state][twist];
+        new_sym_factor =
+          (int)twist_x_edge_to_sym[virtual_twist][p_node->ud.edge_state];
+        p_node[1].ud.edge_state =
+          (int)twist_on_edge[virtual_twist][p_node->ud.edge_state];
+        p_node[1].ud.sym_state =
+          (int)sym_x_invsym_to_sym[p_node->ud.sym_state][new_sym_factor];
+        p_node[1].ud.corner_state = (int)sym_on_corner[new_sym_factor]
+          [(int)twist_on_corner[virtual_twist][p_node->ud.corner_state]];
 
-          if (p_node[1].remain_depth <
-              DIST(p_node[1].ud.corner_state, p_node[1].ud.edge_state))
-            {
-              continue;
-            }
-
-
-          virtual_twist =
-            (int)invsym_on_twist_rl[p_node->rl.sym_state][twist];
-          new_sym_factor =
-            (int)twist_x_edge_to_sym[virtual_twist][p_node->rl.edge_state];
-          p_node[1].rl.edge_state =
-            (int)twist_on_edge[virtual_twist][p_node->rl.edge_state];
-          p_node[1].rl.sym_state =
-            (int)sym_x_invsym_to_sym[p_node->rl.sym_state][new_sym_factor];
-          p_node[1].rl.corner_state = (int)sym_on_corner[new_sym_factor]
-            [(int)twist_on_corner[virtual_twist][p_node->rl.corner_state]];
-
-          if (p_node[1].remain_depth <
-              DIST(p_node[1].rl.corner_state, p_node[1].rl.edge_state))
-            {
-              continue;
-            }
+        if (writeback==NULL && p_node[1].remain_depth <
+            DIST(p_node[1].ud.corner_state, p_node[1].ud.edge_state))
+          {
+            continue;
+          }
 
 
-          virtual_twist =
-            (int)invsym_on_twist_fb[p_node->fb.sym_state][twist];
-          new_sym_factor =
-            (int)twist_x_edge_to_sym[virtual_twist][p_node->fb.edge_state];
-          p_node[1].fb.edge_state =
-            (int)twist_on_edge[virtual_twist][p_node->fb.edge_state];
-          p_node[1].fb.sym_state =
-            (int)sym_x_invsym_to_sym[p_node->fb.sym_state][new_sym_factor];
-          p_node[1].fb.corner_state = (int)sym_on_corner[new_sym_factor]
-            [(int)twist_on_corner[virtual_twist][p_node->fb.corner_state]];
+        virtual_twist =
+          (int)invsym_on_twist_rl[p_node->rl.sym_state][twist];
+        new_sym_factor =
+          (int)twist_x_edge_to_sym[virtual_twist][p_node->rl.edge_state];
+        p_node[1].rl.edge_state =
+          (int)twist_on_edge[virtual_twist][p_node->rl.edge_state];
+        p_node[1].rl.sym_state =
+          (int)sym_x_invsym_to_sym[p_node->rl.sym_state][new_sym_factor];
+        p_node[1].rl.corner_state = (int)sym_on_corner[new_sym_factor]
+          [(int)twist_on_corner[virtual_twist][p_node->rl.corner_state]];
 
-          if (p_node[1].remain_depth <
-              DIST(p_node[1].fb.corner_state, p_node[1].fb.edge_state))
-            {
-              continue;
-            }
+        if (writeback==NULL && p_node[1].remain_depth <
+            DIST(p_node[1].rl.corner_state, p_node[1].rl.edge_state))
+          {
+            continue;
+          }
 
-        }
+
+        virtual_twist =
+          (int)invsym_on_twist_fb[p_node->fb.sym_state][twist];
+        new_sym_factor =
+          (int)twist_x_edge_to_sym[virtual_twist][p_node->fb.edge_state];
+        p_node[1].fb.edge_state =
+          (int)twist_on_edge[virtual_twist][p_node->fb.edge_state];
+        p_node[1].fb.sym_state =
+          (int)sym_x_invsym_to_sym[p_node->fb.sym_state][new_sym_factor];
+        p_node[1].fb.corner_state = (int)sym_on_corner[new_sym_factor]
+          [(int)twist_on_corner[virtual_twist][p_node->fb.corner_state]];
+
+        if (writeback==NULL && p_node[1].remain_depth <
+            DIST(p_node[1].fb.corner_state, p_node[1].fb.edge_state))
+          {
+            continue;
+          }
+
 
         p_node[1].twist = twist;
         p_node[2].twist = -1;
+        p_node[2].follow_type = -1;
         search_tree(p_cube, node_arr, p_node_index+1, writeback, writeback_i);
         }
     
@@ -4286,18 +4289,23 @@ for (ii = start_depth; ii <= search_limit; ii += p_current_metric->increment)
       } else {
         if(depthofstore == 0){
           printf("dddddddddddddddddddddddd");
-          depthofstore=ii;
+          depthofstore = ii;
           search_tree(&full_cube_struct, node_arr, 0, writeback, &writeback_i);
         } else {
-          printf("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n");
-          //#pragma omp parallel for num_threads(3) schedule(static)//default(none) reduction(+:n_nodes) reduction(+:n_tests) reduction(max:sol_found) shared(writeback,full_cube_struct,depthofstore, p_current_metric, writeback_i)
-          for (int node_i=0; node_i < writeback_i; node_i++) {
+          printf("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa%li\n", writeback_i);
+          //default(none) reduction(+:n_nodes) reduction(+:n_tests) reduction(max:sol_found) shared(writeback,full_cube_struct,depthofstore, p_current_metric, writeback_i)
+#pragma omp parallel num_threads(1000)
+          {
             Search_node *t_node_arr = calloc(MAX_TWISTS,sizeof(Search_node));
-            memcpy(t_node_arr,writeback[node_i],MAX_TWISTS*sizeof(Search_node));
-            for (int d=0; d<=depthofstore; d++){
-              t_node_arr[d].remain_depth += p_current_metric->increment;
+#pragma omp for schedule(static)
+            for (int node_i=0; node_i < writeback_i; node_i++) {
+              memcpy(t_node_arr,writeback[node_i],MAX_TWISTS*sizeof(Search_node));
+              int d;
+              for (d=0; t_node_arr[d].twist!=-1 && d<=MAX_TWISTS; d++){
+                t_node_arr[d].remain_depth += ii-depthofstore;
+              }
+              search_tree(&full_cube_struct, t_node_arr, d-1, NULL, NULL);
             }
-            search_tree(&full_cube_struct, t_node_arr, depthofstore, NULL, NULL);
             free(t_node_arr);
           }
         }
