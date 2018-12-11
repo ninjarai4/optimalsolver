@@ -4446,8 +4446,8 @@ for (ii = start_depth; ii <= search_limit; ii += p_current_metric->increment)
           //default(none) reduction(+:n_nodes) reduction(+:n_tests) reduction(max:sol_found) shared(writeback,full_cube_struct,depthofstore, p_current_metric, writeback_i)
 
 //#pragma omp target teams distribute parallel for schedule(static,1) private(t_node_arr)
-/*#pragma acc parallel loop vector copyin(writeback[0:writeback_size][0:MAX_TWISTS], cubedata,\
-cubedata.sym_x_invsym_to_sym[0:N_SYM],\
+#pragma acc parallel loop vector copyin(writeback[0:writeback_size][0:MAX_TWISTS], cubedata, full_cube_struct\
+/*cubedata.sym_x_invsym_to_sym[0:N_SYM],\
 cubedata.invsym_on_twist_ud[0:N_SYM],\
 cubedata.invsym_on_twist_rl[0:N_SYM],\
 cubedata.invsym_on_twist_fb[0:N_SYM],\
@@ -4460,15 +4460,15 @@ cubedata.twist_x_edge_to_sym[0:N_TWIST],\
 cubedata.twist_on_cornerperm[0:N_TWIST],\
 cubedata.twist_on_sliceedge[0:N_TWIST],\
 cubedata.twist_on_follow[0:N_TWIST],\
-cubedata.distance[0:N_CORNER] )*/
+cubedata.distance[0:N_CORNER]*/ )
 
           for (int node_i=0; node_i < writeback_i; node_i++) {
-	    //Search_node *t_writeback = writeback[node_i];
+	    Search_node *t_writeback = writeback[node_i];
             Search_node t_node_arr[MAX_TWISTS];
             // memcpy(t_node_arr,writeback[node_i],MAX_TWISTS*sizeof(Search_node));
             int d;
             for (d=0; d<MAX_TWISTS; d++){
-              t_node_arr[d] = writeback[node_i][d];
+              t_node_arr[d] = t_writeback[d];
             }
             for (d=0; t_node_arr[d].twist!=-1 && d<=MAX_TWISTS; d++){
               t_node_arr[d].remain_depth += ii-depthofstore;
