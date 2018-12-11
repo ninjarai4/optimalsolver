@@ -4392,27 +4392,30 @@ if ((search_limit <= 0) || (search_limit >= MAX_TWISTS))
    search_limit = MAX_TWISTS - 1;
 
 Cubedata cubedata;
-memcpy(cubedata.sym_x_invsym_to_sym, sym_x_invsym_to_sym, sizeof(char)*N_SYM);
+memcpy(cubedata.sym_x_invsym_to_sym, sym_x_invsym_to_sym, sizeof(char*)*N_SYM);
 
-memcpy(cubedata.invsym_on_twist_ud, invsym_on_twist_ud, sizeof(char)*N_SYM);
-memcpy(cubedata.invsym_on_twist_rl, invsym_on_twist_rl, sizeof(char)*N_SYM);
-memcpy(cubedata.invsym_on_twist_fb, invsym_on_twist_fb, sizeof(char)*N_SYM);
+memcpy(cubedata.invsym_on_twist_ud, invsym_on_twist_ud, sizeof(char*)*N_SYM);
+memcpy(cubedata.invsym_on_twist_rl, invsym_on_twist_rl, sizeof(char*)*N_SYM);
+memcpy(cubedata.invsym_on_twist_fb, invsym_on_twist_fb, sizeof(char*)*N_SYM);
 
-memcpy(cubedata.twist_on_corner, twist_on_corner, sizeof(short)*N_TWIST);
-memcpy(cubedata.sym_on_corner, sym_on_corner, sizeof(short)*N_SYM);
+memcpy(cubedata.twist_on_corner, twist_on_corner, sizeof(short*)*N_TWIST);
+memcpy(cubedata.sym_on_corner, sym_on_corner, sizeof(short*)*N_SYM);
 
-memcpy(cubedata.fulledge_to_edge, fulledge_to_edge, sizeof(short)*N_FULLEDGE);
-memcpy(cubedata.fulledge_to_sym, fulledge_to_sym, sizeof(char)*N_FULLEDGE);
+cubedata.fulledge_to_edge =
+                 (unsigned short *)malloc(sizeof(unsigned short [N_FULLEDGE]));
+cubedata.fulledge_to_sym = (unsigned char *)malloc(sizeof(unsigned char [N_FULLEDGE]));
+memcpy(cubedata.fulledge_to_edge, fulledge_to_edge, sizeof(unsigned short [N_FULLEDGE]));
+memcpy(cubedata.fulledge_to_sym, fulledge_to_sym, sizeof(unsigned char [N_FULLEDGE]));
 
-memcpy(cubedata.twist_on_edge, twist_on_edge, sizeof(short)*N_TWIST);
-memcpy(cubedata.twist_x_edge_to_sym, twist_x_edge_to_sym, sizeof(char)*N_TWIST);
+memcpy(cubedata.twist_on_edge, twist_on_edge, sizeof(short*)*N_TWIST);
+memcpy(cubedata.twist_x_edge_to_sym, twist_x_edge_to_sym, sizeof(char*)*N_TWIST);
 
-memcpy(cubedata.twist_on_cornerperm, twist_on_cornerperm, sizeof(short)*N_TWIST);
-memcpy(cubedata.twist_on_sliceedge, twist_on_sliceedge, sizeof(short)*N_TWIST);
+memcpy(cubedata.twist_on_cornerperm, twist_on_cornerperm, sizeof(short*)*N_TWIST);
+memcpy(cubedata.twist_on_sliceedge, twist_on_sliceedge, sizeof(short*)*N_TWIST);
 
-memcpy(cubedata.twist_on_follow, twist_on_follow, sizeof(short)*N_TWIST);
+memcpy(cubedata.twist_on_follow, twist_on_follow, sizeof(short*)*N_TWIST);
 
-memcpy(cubedata.distance, distance, sizeof(short)*N_CORNER);
+memcpy(cubedata.distance, distance, sizeof(short*)*N_CORNER);
 
 cubedata.p_current_metric = *p_current_metric;
 cubedata.p_current_options = *p_current_options;
@@ -4443,7 +4446,7 @@ for (ii = start_depth; ii <= search_limit; ii += p_current_metric->increment)
           //default(none) reduction(+:n_nodes) reduction(+:n_tests) reduction(max:sol_found) shared(writeback,full_cube_struct,depthofstore, p_current_metric, writeback_i)
 
 //#pragma omp target teams distribute parallel for schedule(static,1) private(t_node_arr)
-#pragma acc parallel loop vector /*copyin(writeback[0:writeback_size][0:MAX_TWISTS], cubedata,\
+/*#pragma acc parallel loop vector copyin(writeback[0:writeback_size][0:MAX_TWISTS], cubedata,\
 cubedata.sym_x_invsym_to_sym[0:N_SYM],\
 cubedata.invsym_on_twist_ud[0:N_SYM],\
 cubedata.invsym_on_twist_rl[0:N_SYM],\
@@ -4462,12 +4465,16 @@ cubedata.distance[0:N_CORNER] )*/
           for (int node_i=0; node_i < writeback_i; node_i++) {
 	    //Search_node *t_writeback = writeback[node_i];
             Search_node t_node_arr[MAX_TWISTS];
-            //memcpy(t_node_arr,writeback[node_i],MAX_TWISTS*sizeof(Search_node));
+            // memcpy(t_node_arr,writeback[node_i],MAX_TWISTS*sizeof(Search_node));
             int d;
-            for (d=0; t_node_arr[d].twist!=-1 && d<=MAX_TWISTS; d++){
+            for (d=0; d<MAX_TWISTS; d++){
               t_node_arr[d] = writeback[node_i][d];
+            }
+            for (d=0; t_node_arr[d].twist!=-1 && d<=MAX_TWISTS; d++){
               t_node_arr[d].remain_depth += ii-depthofstore;
             }
+            //if (d<=MAX_TWISTS)
+		    //t_node_arr[d] = writeback[node_i][d];
             acc_search_tree(&full_cube_struct, t_node_arr, d-1, cubedata);
           }
         }
