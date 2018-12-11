@@ -14,8 +14,8 @@
 #include  <stdio.h>
 #include  <stdlib.h>
 #include  <string.h>
-#include  <setjmp.h>
-#include  <signal.h>
+// #include  <setjmp.h>
+// #include  <signal.h>
 #include  <omp.h>
 #include  <math.h>
 #include <assert.h>
@@ -184,6 +184,8 @@
 #define  DIST(c, e)     (((e) & 0x1) ? (((int)distance[c][(e) >> 1]) >> 4)   \
                                      : (((int)distance[c][(e) >> 1]) & 0xF))
 
+#define  CDDIST(c, e)     (((e) & 0x1) ? (((int)cubedata.distance[c][(e) >> 1]) >> 4)   \
+                                     : (((int)cubedata.distance[c][(e) >> 1]) & 0xF))
 
 typedef struct cube
         {
@@ -291,14 +293,14 @@ static unsigned short  *twist_on_follow[N_TWIST];
 
 static unsigned char   *distance[N_CORNER];
 
-static char            *edge_cubie_str[] = {"UF", "UR", "UB", "UL",
+const static char            *edge_cubie_str[] = {"UF", "UR", "UB", "UL",
                                             "DF", "DR", "DB", "DL",
                                             "FR", "FL", "BR", "BL",
                                             "FU", "RU", "BU", "LU",
                                             "FD", "RD", "BD", "LD",
                                             "RF", "LF", "RB", "LB"};
 
-static char            *corner_cubie_str[] = {"UFR", "URB", "UBL", "ULF",
+const static char            *corner_cubie_str[] = {"UFR", "URB", "UBL", "ULF",
                                               "DRF", "DFL", "DLB", "DBR",
                                               "FRU", "RBU", "BLU", "LFU",
                                               "RFD", "FLD", "LBD", "BRD",
@@ -312,7 +314,38 @@ static unsigned long     n_nodes;
 static unsigned int     n_tests;
 static int              sol_found;
 
-static sigjmp_buf       jump_env;
+typedef struct Cubedata
+        {
+	unsigned char   *sym_x_invsym_to_sym[N_SYM];
+
+	unsigned char   *invsym_on_twist_ud[N_SYM];
+	unsigned char   *invsym_on_twist_rl[N_SYM];
+	unsigned char   *invsym_on_twist_fb[N_SYM];
+
+	unsigned short  *twist_on_corner[N_TWIST];
+	unsigned short  *sym_on_corner[N_SYM];
+
+	unsigned short  *fulledge_to_edge;
+	unsigned char   *fulledge_to_sym;
+
+	unsigned short  *twist_on_edge[N_TWIST];
+	unsigned char   *twist_x_edge_to_sym[N_TWIST];
+
+	unsigned short  *twist_on_cornerperm[N_TWIST];
+	unsigned short  *twist_on_sliceedge[N_TWIST];
+
+	unsigned short  *twist_on_follow[N_TWIST];
+
+	unsigned char   *distance[N_CORNER];
+
+	Metric_data     p_current_metric;
+	Options         p_current_options;
+
+        }
+        Cubedata;
+
+
+// static sigjmp_buf       jump_env;
 
 
 /* ========================================================================= */
@@ -334,7 +367,7 @@ return;
 {
 printf("\n-- user interrupt --\n");
 fflush(stdout);
-siglongjmp(jump_env, 1);
+// siglongjmp(jump_env, 1);
 
 return;
 }
@@ -3911,7 +3944,8 @@ return;
 
 
 /* ========================================================================= */
-   int  test_for_solution(Full_cube  *p_cube, Search_node  *node_arr)
+#pragma acc routine vector
+   int  test_for_solution(Full_cube  *p_cube, Search_node  *node_arr, Cubedata cubedata)
 /* ------------------------------------------------------------------------- */
 
 {
@@ -3919,57 +3953,51 @@ register Search_node   *p_node;
 register int            cornerperm, sliceedge;
 
 
-n_tests++;
+// n_tests++;
 
 cornerperm = p_cube->cornerperm;
 for (p_node = node_arr; p_node->remain_depth > 0; p_node++)
-    cornerperm = (int)twist_on_cornerperm[p_node[1].twist][cornerperm];
+    cornerperm = (int)cubedata.twist_on_cornerperm[p_node[1].twist][cornerperm];
 
 if (cornerperm != CORNERPERM_START)
    return 0;                                  /*  not a solution  */
 
 sliceedge = p_cube->ud_sliceedge;
 for (p_node = node_arr; p_node->remain_depth > 0; p_node++)
-    sliceedge = (int)twist_on_sliceedge[p_node[1].twist][sliceedge];
+    sliceedge = (int)cubedata.twist_on_sliceedge[p_node[1].twist][sliceedge];
 
 if (sliceedge != UD_SLICEEDGE_START)
    return 0;                                  /*  not a solution  */
 
 sliceedge = p_cube->rl_sliceedge;
 for (p_node = node_arr; p_node->remain_depth > 0; p_node++)
-    sliceedge = (int)twist_on_sliceedge[p_node[1].twist][sliceedge];
+    sliceedge = (int)cubedata.twist_on_sliceedge[p_node[1].twist][sliceedge];
 
 if (sliceedge != RL_SLICEEDGE_START)
    return 0;                                  /*  not a solution  */
 
 sliceedge = p_cube->fb_sliceedge;
 for (p_node = node_arr; p_node->remain_depth > 0; p_node++)
-    sliceedge = (int)twist_on_sliceedge[p_node[1].twist][sliceedge];
+    sliceedge = (int)cubedata.twist_on_sliceedge[p_node[1].twist][sliceedge];
 
 if (sliceedge != FB_SLICEEDGE_START)
    return 0;                                  /*  not a solution  */
 
-output_solution(node_arr);                    /*  solution !  */
+//output_solution(node_arr);                    /*  solution !  */
 
 return 1;
 }
 
-
 /* ========================================================================= */
-void  search_tree(Full_cube  *p_cube, Search_node  *node_arr, int p_node_index, Search_node **writeback, long *writeback_i)
+#pragma acc routine vector
+void  acc_search_tree(Full_cube  *p_cube, Search_node  *node_arr, int p_node_index, Cubedata cubedata)
 /* ------------------------------------------------------------------------- */
 
 {
 
 if (node_arr[p_node_index].remain_depth == 0)
     {
-      if (writeback != NULL){
-        writeback[*writeback_i] = calloc(MAX_TWISTS,sizeof(Search_node));
-        memcpy(writeback[*writeback_i],node_arr,MAX_TWISTS*sizeof(Search_node));
-        (*writeback_i)++;
-      }
-
-      if (test_for_solution(p_cube, node_arr) &&
+      if (test_for_solution(p_cube, node_arr, cubedata) &&
           p_current_options->one_solution_only)
         {}  // figure out how to quit
     }
@@ -3982,13 +4010,114 @@ if (node_arr[p_node_index].remain_depth == 0)
         {
         Search_node *p_node = node_arr+p_node_index;
         register int virtual_twist, new_sym_factor;
-        p_node[1].follow_type = (int)twist_on_follow[twist][p_node->follow_type];
+        p_node[1].follow_type = (int)cubedata.twist_on_follow[twist][p_node->follow_type];
 
         if (p_node[1].follow_type == FOLLOW_INVALID)
           continue;
 
         p_node[1].remain_depth = p_node->remain_depth -
-          p_current_metric->twist_length[twist];
+          cubedata.p_current_metric.twist_length[twist];
+        if (p_node[1].remain_depth < 0)
+          {
+            continue;
+          }
+
+ //       n_nodes++;
+
+        virtual_twist =
+          (int)cubedata.invsym_on_twist_ud[p_node->ud.sym_state][twist];
+        new_sym_factor =
+          (int)cubedata.twist_x_edge_to_sym[virtual_twist][p_node->ud.edge_state];
+        p_node[1].ud.edge_state =
+          (int)cubedata.twist_on_edge[virtual_twist][p_node->ud.edge_state];
+        p_node[1].ud.sym_state =
+          (int)cubedata.sym_x_invsym_to_sym[p_node->ud.sym_state][new_sym_factor];
+        p_node[1].ud.corner_state = (int)cubedata.sym_on_corner[new_sym_factor]
+          [(int)cubedata.twist_on_corner[virtual_twist][p_node->ud.corner_state]];
+
+        if (p_node[1].remain_depth <
+            CDDIST(p_node[1].ud.corner_state, p_node[1].ud.edge_state))
+          {
+            continue;
+          }
+
+        virtual_twist =
+          (int)cubedata.invsym_on_twist_rl[p_node->rl.sym_state][twist];
+        new_sym_factor =
+          (int)cubedata.twist_x_edge_to_sym[virtual_twist][p_node->rl.edge_state];
+        p_node[1].rl.edge_state =
+          (int)cubedata.twist_on_edge[virtual_twist][p_node->rl.edge_state];
+        p_node[1].rl.sym_state =
+          (int)cubedata.sym_x_invsym_to_sym[p_node->rl.sym_state][new_sym_factor];
+        p_node[1].rl.corner_state = (int)cubedata.sym_on_corner[new_sym_factor]
+          [(int)cubedata.twist_on_corner[virtual_twist][p_node->rl.corner_state]];
+
+        if (p_node[1].remain_depth <
+            CDDIST(p_node[1].rl.corner_state, p_node[1].rl.edge_state))
+          {
+            continue;
+          }
+
+        virtual_twist =
+          (int)cubedata.invsym_on_twist_fb[p_node->fb.sym_state][twist];
+        new_sym_factor =
+          (int)cubedata.twist_x_edge_to_sym[virtual_twist][p_node->fb.edge_state];
+        p_node[1].fb.edge_state =
+          (int)cubedata.twist_on_edge[virtual_twist][p_node->fb.edge_state];
+        p_node[1].fb.sym_state =
+          (int)cubedata.sym_x_invsym_to_sym[p_node->fb.sym_state][new_sym_factor];
+        p_node[1].fb.corner_state = (int)cubedata.sym_on_corner[new_sym_factor]
+          [(int)cubedata.twist_on_corner[virtual_twist][p_node->fb.corner_state]];
+
+        if (p_node[1].remain_depth <
+            CDDIST(p_node[1].fb.corner_state, p_node[1].fb.edge_state))
+          {
+            continue;
+          }
+
+        p_node[1].twist = twist;
+        p_node[2].twist = -1;
+        p_node[2].follow_type = -1;
+        acc_search_tree(p_cube, node_arr, p_node_index+1, cubedata);
+        }
+    }
+}
+
+
+/* ========================================================================= */
+void  search_tree(Full_cube  *p_cube, Search_node  *node_arr, int p_node_index, Search_node **writeback, long *writeback_i, Cubedata cubedata)
+/* ------------------------------------------------------------------------- */
+
+{
+
+if (node_arr[p_node_index].remain_depth == 0)
+    {
+      if (writeback != NULL){
+        writeback[*writeback_i] = calloc(MAX_TWISTS,sizeof(Search_node));
+        memcpy(writeback[*writeback_i],node_arr,MAX_TWISTS*sizeof(Search_node));
+        (*writeback_i)++;
+      }
+
+      if (test_for_solution(p_cube, node_arr, cubedata) &&
+          p_current_options->one_solution_only)
+        {}  // figure out how to quit
+    }
+ else
+    {
+      /* int threadno = omp_get_thread_num(); */
+/* #pragma omp parallel for num_threads(3) default(shared) reduction(+:n_nodes)  \ */
+/*   reduction(+:n_tests) reduction(max:sol_found) firstprivate(node_arr,p_cube,p_node_index) if(p_node_index<2/\*,threadno*\/) */
+    for (register int twist = 0; twist < N_TWIST; twist++)
+        {
+        Search_node *p_node = node_arr+p_node_index;
+        register int virtual_twist, new_sym_factor;
+        p_node[1].follow_type = (int)cubedata.twist_on_follow[twist][p_node->follow_type];
+
+        if (p_node[1].follow_type == FOLLOW_INVALID)
+          continue;
+
+        p_node[1].remain_depth = p_node->remain_depth -
+          cubedata.p_current_metric.twist_length[twist];
         if (p_node[1].remain_depth < 0)
           {
             continue;
@@ -3997,72 +4126,62 @@ if (node_arr[p_node_index].remain_depth == 0)
         n_nodes++;
 
         virtual_twist =
-          (int)invsym_on_twist_ud[p_node->ud.sym_state][twist];
+          (int)cubedata.invsym_on_twist_ud[p_node->ud.sym_state][twist];
         new_sym_factor =
-          (int)twist_x_edge_to_sym[virtual_twist][p_node->ud.edge_state];
+          (int)cubedata.twist_x_edge_to_sym[virtual_twist][p_node->ud.edge_state];
         p_node[1].ud.edge_state =
-          (int)twist_on_edge[virtual_twist][p_node->ud.edge_state];
+          (int)cubedata.twist_on_edge[virtual_twist][p_node->ud.edge_state];
         p_node[1].ud.sym_state =
-          (int)sym_x_invsym_to_sym[p_node->ud.sym_state][new_sym_factor];
-        p_node[1].ud.corner_state = (int)sym_on_corner[new_sym_factor]
-          [(int)twist_on_corner[virtual_twist][p_node->ud.corner_state]];
+          (int)cubedata.sym_x_invsym_to_sym[p_node->ud.sym_state][new_sym_factor];
+        p_node[1].ud.corner_state = (int)cubedata.sym_on_corner[new_sym_factor]
+          [(int)cubedata.twist_on_corner[virtual_twist][p_node->ud.corner_state]];
 
         if (writeback==NULL && p_node[1].remain_depth <
-            DIST(p_node[1].ud.corner_state, p_node[1].ud.edge_state))
+            CDDIST(p_node[1].ud.corner_state, p_node[1].ud.edge_state))
           {
             continue;
           }
 
-
         virtual_twist =
-          (int)invsym_on_twist_rl[p_node->rl.sym_state][twist];
+          (int)cubedata.invsym_on_twist_rl[p_node->rl.sym_state][twist];
         new_sym_factor =
-          (int)twist_x_edge_to_sym[virtual_twist][p_node->rl.edge_state];
+          (int)cubedata.twist_x_edge_to_sym[virtual_twist][p_node->rl.edge_state];
         p_node[1].rl.edge_state =
-          (int)twist_on_edge[virtual_twist][p_node->rl.edge_state];
+          (int)cubedata.twist_on_edge[virtual_twist][p_node->rl.edge_state];
         p_node[1].rl.sym_state =
-          (int)sym_x_invsym_to_sym[p_node->rl.sym_state][new_sym_factor];
-        p_node[1].rl.corner_state = (int)sym_on_corner[new_sym_factor]
-          [(int)twist_on_corner[virtual_twist][p_node->rl.corner_state]];
+          (int)cubedata.sym_x_invsym_to_sym[p_node->rl.sym_state][new_sym_factor];
+        p_node[1].rl.corner_state = (int)cubedata.sym_on_corner[new_sym_factor]
+          [(int)cubedata.twist_on_corner[virtual_twist][p_node->rl.corner_state]];
 
         if (writeback==NULL && p_node[1].remain_depth <
-            DIST(p_node[1].rl.corner_state, p_node[1].rl.edge_state))
+            CDDIST(p_node[1].rl.corner_state, p_node[1].rl.edge_state))
           {
             continue;
           }
-
 
         virtual_twist =
-          (int)invsym_on_twist_fb[p_node->fb.sym_state][twist];
+          (int)cubedata.invsym_on_twist_fb[p_node->fb.sym_state][twist];
         new_sym_factor =
-          (int)twist_x_edge_to_sym[virtual_twist][p_node->fb.edge_state];
+          (int)cubedata.twist_x_edge_to_sym[virtual_twist][p_node->fb.edge_state];
         p_node[1].fb.edge_state =
-          (int)twist_on_edge[virtual_twist][p_node->fb.edge_state];
+          (int)cubedata.twist_on_edge[virtual_twist][p_node->fb.edge_state];
         p_node[1].fb.sym_state =
-          (int)sym_x_invsym_to_sym[p_node->fb.sym_state][new_sym_factor];
-        p_node[1].fb.corner_state = (int)sym_on_corner[new_sym_factor]
-          [(int)twist_on_corner[virtual_twist][p_node->fb.corner_state]];
+          (int)cubedata.sym_x_invsym_to_sym[p_node->fb.sym_state][new_sym_factor];
+        p_node[1].fb.corner_state = (int)cubedata.sym_on_corner[new_sym_factor]
+          [(int)cubedata.twist_on_corner[virtual_twist][p_node->fb.corner_state]];
 
         if (writeback==NULL && p_node[1].remain_depth <
-            DIST(p_node[1].fb.corner_state, p_node[1].fb.edge_state))
+            CDDIST(p_node[1].fb.corner_state, p_node[1].fb.edge_state))
           {
             continue;
           }
-
 
         p_node[1].twist = twist;
         p_node[2].twist = -1;
         p_node[2].follow_type = -1;
-        search_tree(p_cube, node_arr, p_node_index+1, writeback, writeback_i);
+        search_tree(p_cube, node_arr, p_node_index+1, writeback, writeback_i, cubedata);
         }
-    
-      /* if (writeback != NULL){ */
-      /*   writeback[*writeback_i] = calloc(MAX_TWISTS,sizeof(Search_node)); */
-      /*   memcpy(writeback[*writeback_i],node_arr,MAX_TWISTS*sizeof(Search_node)); */
-      /*   (*writeback_i)++; */
-      /* } */
     }
-
 }
 
 
@@ -4223,7 +4342,8 @@ static int              initialized = 0;
 Full_cube               full_cube_struct;
 Search_node             node_arr[MAX_TWISTS];
 int                     ii, start_depth, search_limit;
- Search_node **writeback = calloc(pow(N_TWIST, GPU_CUTOFF_DEPTH+1),sizeof(Search_node*) * 2);
+long writeback_size = pow(N_TWIST, GPU_CUTOFF_DEPTH+1) * 2;
+ Search_node **writeback = calloc(writeback_size, sizeof(Search_node*));
 long writeback_i = 0;
  int depthofstore = 0;
 
@@ -4235,7 +4355,7 @@ if (initialized == 0)
    initialized = 1;
    }
 
-print_cube(p_cube);
+//print_cube(p_cube);
 if (cube_is_solved(p_cube))
    {
    printf("cube is already solved!\n");
@@ -4271,6 +4391,33 @@ search_limit = p_current_options->search_limit;
 if ((search_limit <= 0) || (search_limit >= MAX_TWISTS))
    search_limit = MAX_TWISTS - 1;
 
+Cubedata cubedata;
+memcpy(cubedata.sym_x_invsym_to_sym, sym_x_invsym_to_sym, sizeof(char)*N_SYM);
+
+memcpy(cubedata.invsym_on_twist_ud, invsym_on_twist_ud, sizeof(char)*N_SYM);
+memcpy(cubedata.invsym_on_twist_rl, invsym_on_twist_rl, sizeof(char)*N_SYM);
+memcpy(cubedata.invsym_on_twist_fb, invsym_on_twist_fb, sizeof(char)*N_SYM);
+
+memcpy(cubedata.twist_on_corner, twist_on_corner, sizeof(short)*N_TWIST);
+memcpy(cubedata.sym_on_corner, sym_on_corner, sizeof(short)*N_SYM);
+
+memcpy(cubedata.fulledge_to_edge, fulledge_to_edge, sizeof(short)*N_FULLEDGE);
+memcpy(cubedata.fulledge_to_sym, fulledge_to_sym, sizeof(char)*N_FULLEDGE);
+
+memcpy(cubedata.twist_on_edge, twist_on_edge, sizeof(short)*N_TWIST);
+memcpy(cubedata.twist_x_edge_to_sym, twist_x_edge_to_sym, sizeof(char)*N_TWIST);
+
+memcpy(cubedata.twist_on_cornerperm, twist_on_cornerperm, sizeof(short)*N_TWIST);
+memcpy(cubedata.twist_on_sliceedge, twist_on_sliceedge, sizeof(short)*N_TWIST);
+
+memcpy(cubedata.twist_on_follow, twist_on_follow, sizeof(short)*N_TWIST);
+
+memcpy(cubedata.distance, distance, sizeof(short)*N_CORNER);
+
+cubedata.p_current_metric = *p_current_metric;
+cubedata.p_current_options = *p_current_options;
+
+
 for (ii = start_depth; ii <= search_limit; ii += p_current_metric->increment)
     {
     n_nodes = (long long int)0;
@@ -4285,25 +4432,43 @@ for (ii = start_depth; ii <= search_limit; ii += p_current_metric->increment)
 
       /* search_tree(&full_cube_struct, local_node_arr, local_node_arr); */
       if(ii<GPU_CUTOFF_DEPTH) {
-        search_tree(&full_cube_struct, node_arr, 0, NULL, NULL);
+        search_tree(&full_cube_struct, node_arr, 0, NULL, NULL, cubedata);
       } else {
         if(depthofstore == 0){
           printf("dddddddddddddddddddddddd");
           depthofstore = ii;
-          search_tree(&full_cube_struct, node_arr, 0, writeback, &writeback_i);
+          search_tree(&full_cube_struct, node_arr, 0, writeback, &writeback_i, cubedata);
         } else {
           printf("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa%li\n", writeback_i);
           //default(none) reduction(+:n_nodes) reduction(+:n_tests) reduction(max:sol_found) shared(writeback,full_cube_struct,depthofstore, p_current_metric, writeback_i)
 
-          Search_node t_node_arr[MAX_TWISTS];
-#pragma omp target teams distribute parallel for schedule(static,1) private(t_node_arr)
+//#pragma omp target teams distribute parallel for schedule(static,1) private(t_node_arr)
+#pragma acc parallel loop vector /*copyin(writeback[0:writeback_size][0:MAX_TWISTS], cubedata,\
+cubedata.sym_x_invsym_to_sym[0:N_SYM],\
+cubedata.invsym_on_twist_ud[0:N_SYM],\
+cubedata.invsym_on_twist_rl[0:N_SYM],\
+cubedata.invsym_on_twist_fb[0:N_SYM],\
+cubedata.twist_on_corner[0:N_TWIST],\
+cubedata.sym_on_corner[0:N_SYM],\
+cubedata.fulledge_to_edge[0:N_FULLEDGE],\
+cubedata.fulledge_to_sym[0:N_FULLEDGE],\
+cubedata.twist_on_edge[0:N_TWIST],\
+cubedata.twist_x_edge_to_sym[0:N_TWIST],\
+cubedata.twist_on_cornerperm[0:N_TWIST],\
+cubedata.twist_on_sliceedge[0:N_TWIST],\
+cubedata.twist_on_follow[0:N_TWIST],\
+cubedata.distance[0:N_CORNER] )*/
+
           for (int node_i=0; node_i < writeback_i; node_i++) {
-            memcpy(t_node_arr,writeback[node_i],MAX_TWISTS*sizeof(Search_node));
+	    //Search_node *t_writeback = writeback[node_i];
+            Search_node t_node_arr[MAX_TWISTS];
+            //memcpy(t_node_arr,writeback[node_i],MAX_TWISTS*sizeof(Search_node));
             int d;
             for (d=0; t_node_arr[d].twist!=-1 && d<=MAX_TWISTS; d++){
+              t_node_arr[d] = writeback[node_i][d];
               t_node_arr[d].remain_depth += ii-depthofstore;
             }
-            search_tree(&full_cube_struct, t_node_arr, d-1, NULL, NULL);
+            acc_search_tree(&full_cube_struct, t_node_arr, d-1, cubedata);
           }
         }
       }
@@ -4341,7 +4506,7 @@ int                     stat;
 init_options(&metric_data, &user_options);
 init_globals();
 
-signal(SIGINT, SIG_IGN);
+// signal(SIGINT, SIG_IGN);
 
 while (1)
       {
@@ -4351,13 +4516,13 @@ while (1)
 
       if (stat == 0)
          {
-         if (sigsetjmp(jump_env, 1) == 0)
-            {
-            signal(SIGINT, user_interrupt);
+         // if (sigsetjmp(jump_env, 1) == 0)
+            // {
+            // signal(SIGINT, user_interrupt);
             solve_cube(&cube_struct);
-            }
-
-         signal(SIGINT, SIG_IGN);
+            // }
+// 
+         // signal(SIGINT, SIG_IGN);
          }
       }
 
